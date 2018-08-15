@@ -19,12 +19,12 @@
 * along with this program. If not, see http://opensource.org/licenses/gpl-3.0.html.
 *
 * @category Navin
-* @package Navin_Importexportcategory
+* @package Navin_ImportExportCategory
 * @copyright Copyright (c) 2016 Mage Delight (http://www.navinbhudiya.com/)
 * @license http://opensource.org/licenses/gpl-3.0.html GNU General Public License,version 3 (GPL-3.0)
 * @author Navin Bhudiya <navindbhudiya@gmail.com>
 */
-namespace Navin\Importexportcategory\Block\Adminhtml\Exportcategory\Edit\Tab;
+namespace Navin\ImportExportCategory\Block\Adminhtml\Exportcategory\Edit\Tab;
 
 class Exportcategory extends \Magento\Backend\Block\Widget\Form\Generic implements \Magento\Backend\Block\Widget\Tab\TabInterface
 {
@@ -38,7 +38,7 @@ class Exportcategory extends \Magento\Backend\Block\Widget\Form\Generic implemen
         $form = $this->_formFactory->create();
         $objectManager = \Magento\Framework\App\ObjectManager::getInstance();
         $storemanager = $objectManager->create('Magento\Store\Model\StoreManagerInterface');
-        $url = $this->getViewFileUrl('Navin_Importexportcategory/navin_categoryimport.zip');
+        $url = $this->getViewFileUrl('Navin_ImportExportCategory/navin_categoryimport.zip');
         $fieldsetexport = $form->addFieldset(
             'export_fieldset',
             [

@@ -19,7 +19,7 @@
 * along with this program. If not, see http://opensource.org/licenses/gpl-3.0.html.
 *
 * @category Navin
-* @package Navin_Importexportcategory
+* @package Navin_ImportExportCategory
 * @copyright Copyright (c) 2016 Mage Delight (http://www.navinbhudiya.com/)
 * @license http://opensource.org/licenses/gpl-3.0.html GNU General Public License,version 3 (GPL-3.0)
 * @author Navin Bhudiya <navindbhudiya@gmail.com>
@@ -28,6 +28,6 @@
 <?php
 \Magento\Framework\Component\ComponentRegistrar::register(
     \Magento\Framework\Component\ComponentRegistrar::MODULE,
-    'Navin_Importexportcategory',
+    'Navin_ImportExportCategory',
     __DIR__
 );

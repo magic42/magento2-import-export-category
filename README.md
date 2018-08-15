@@ -13,7 +13,7 @@ composer config repositories.navin git git@github.com:mobilefunuk/magento2-impor
 composer require navin/importexportcategory:"*"
 
 # Enable Module
-php bin/magento module:enable Navin_Importexportcategory
+php bin/magento module:enable Navin_ImportExportCategory
 
 # Upgrade Magento Database
 php bin/magento setup:upgrade
@@ -27,11 +27,11 @@ php bin/magento cache:flush
 
 ## Manual Install
 
-- Create a new directory at `<magento_root>/app/code/Navin/Importexportcategory`
+- Create a new directory at `<magento_root>/app/code/Navin/ImportExportCategory`
 - Copy or clone this repository into this directory
 - `ssh` to your magento instance
 - `cd` to your Magento Root directory
-- Run command `php bin/magento module:enable Navin_Importexportcategory`
+- Run command `php bin/magento module:enable Navin_ImportExportCategory`
 - Run command `php bin/magento setup:upgrade`
 - Run command `php bin/magento setup:static-content:deploy`
 - And finally Flush the Magento Cache with `php bin/magento cache:flush`

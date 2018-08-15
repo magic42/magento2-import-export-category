@@ -19,12 +19,12 @@
 * along with this program. If not, see http://opensource.org/licenses/gpl-3.0.html.
 *
 * @category Navin
-* @package Navin_Importexportcategory
+* @package Navin_ImportExportCategory
 * @copyright Copyright (c) 2016 Mage Delight (http://www.navinbhudiya.com/)
 * @license http://opensource.org/licenses/gpl-3.0.html GNU General Public License,version 3 (GPL-3.0)
 * @author Navin Bhudiya <navindbhudiya@gmail.com>
 */
-namespace Navin\Importexportcategory\Block\Adminhtml\Exportcategory;
+namespace Navin\ImportExportCategory\Block\Adminhtml\Exportcategory;
 
 class Edit extends \Magento\Backend\Block\Widget\Form\Container
 {
@@ -60,7 +60,7 @@ class Edit extends \Magento\Backend\Block\Widget\Form\Container
     protected function _construct()
     {
         $this->_objectId = 'export_id';
-        $this->_blockGroup = 'Navin_Importexportcategory';
+        $this->_blockGroup = 'Navin_ImportExportCategory';
         $this->_controller = 'adminhtml_exportcategory';
         parent::_construct();
         $this->buttonList->remove('save');

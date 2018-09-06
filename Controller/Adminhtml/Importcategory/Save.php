@@ -26,192 +26,257 @@
 */
 namespace Navin\ImportExportCategory\Controller\Adminhtml\Importcategory;
 
+use Magento\Catalog\Model\CategoryFactory;
 use Magento\Framework\App\Filesystem\DirectoryList;
+use Magento\Framework\Exception\NoSuchEntityException;
+use Magento\Backend\Model\View\Result\Redirect;
+use Magento\Framework\File\Csv;
+use Magento\Framework\Filesystem;
+use Magento\Framework\Filesystem\Io\File;
+use Magento\Framework\Module\Dir\Reader;
+use Magento\Framework\Registry;
+use Magento\Backend\App\Action\Context;
+use Magento\Framework\DataObject;
+use Magento\Framework\Exception\LocalizedException;
+use Magento\Backend\Model\Session;
+use Magento\Backend\App\Action;
+use Magento\MediaStorage\Model\File\UploaderFactory;
+use Magento\Store\Model\StoreManagerInterface;
+use Psr\Log\LoggerInterface;
 
-class Save extends \Magento\Backend\App\Action
+class Save extends Action
 {
     /**
      * Backend session
      *
-     * @var \Magento\Backend\Model\Session
+     * @var Session
      */
-    protected $_backendSession;
+    protected $backendSession;
 
     /**
-     * constructor
-     *
-     * @param \Magento\Framework\Registry $registry
-     * @param \Magento\Backend\App\Action\Context $context
+     * Save constructor.
+     * @param Registry $registry
+     * @param UploaderFactory $fileUploaderFactory
+     * @param Filesystem $fileSystem
+     * @param Reader $moduleReader
+     * @param Csv $fileCsv
+     * @param StoreManagerInterface $storeManagerInterface
+     * @param CategoryFactory $categoryFactory
+     * @param LoggerInterface $logger
+     * @param File $fileio
+     * @param Context $context
      */
     public function __construct(
-        \Magento\Framework\Registry $registry,
-        \Magento\MediaStorage\Model\File\UploaderFactory $fileUploaderFactory,
-        \Magento\Framework\Filesystem $fileSystem,
-        \Magento\Framework\Module\Dir\Reader $moduleReader,
-        \Magento\Framework\File\Csv $fileCsv,
-        \Magento\Store\Model\StoreManagerInterface $storeManagerInterface,
-        \Magento\Catalog\Model\CategoryFactory $categoryFactory,
-        \Psr\Log\LoggerInterface $logger,
-        \Magento\Framework\Filesystem\Io\File $fileio,
-        \Magento\Backend\App\Action\Context $context
+        Registry $registry,
+        UploaderFactory $fileUploaderFactory,
+        Filesystem $fileSystem,
+        Reader $moduleReader,
+        Csv $fileCsv,
+        StoreManagerInterface $storeManagerInterface,
+        CategoryFactory $categoryFactory,
+        LoggerInterface $logger,
+        File $fileio,
+        Context $context
     ) {
-    
-        
-        $this->_backendSession = $context->getSession();
-        $this->_fileUploaderFactory = $fileUploaderFactory;
-        $this->_filesystem = $fileSystem;
-        $this->_moduleReader = $moduleReader;
-        $this->_fileCsv = $fileCsv;
-        $this->_storeManager = $storeManagerInterface;
-        $this->_categoryFactory = $categoryFactory;
+        $this->backendSession = $context->getSession();
+        $this->fileUploaderFactory = $fileUploaderFactory;
+        $this->filesystem = $fileSystem;
+        $this->moduleReader = $moduleReader;
+        $this->fileCsv = $fileCsv;
+        $this->storeManager = $storeManagerInterface;
+        $this->categoryFactory = $categoryFactory;
         $this->registry = $registry;
-        $this->_logger = $logger;
-        $this->_fileio = $fileio;
+        $this->logger = $logger;
+        $this->fileio = $fileio;
         parent::__construct($context);
     }
 
     /**
-     * run the action
+     * @uses given CSV file to import categories
      *
-     * @return \Magento\Backend\Model\View\Result\Redirect
+     * @return Redirect
      */
     public function execute()
     {
-
         $resultRedirect = $this->resultRedirectFactory->create();
         $this->registry->register('isSecureArea', true);
+        
         try {
-            $filepath = $this->_uploadFileAndGetName();
-            if ($filepath!='' && file_exists($filepath)) {
-                chmod($filepath, 0777);
-                $data = $this->_fileCsv->getData($filepath);
+            $filePath = $this->uploadFileAndGetName();
+            
+            if (($filePath != '') && file_exists($filePath)) {
+                chmod($filePath, 0777);
+                $data = $this->fileCsv->getData($filePath);
+                
+                /* If the file is not empty, proceed with importing */
                 if (isset($data[0]) && !empty($data[0])) {
+                    
                     $header = $data[0];
-                    $categorieskey = array_search('categories', $header);
-                    $categoryidkey = array_search('category_id', $header);
-                    $storedata = array_search('store', $header);
+                    $categoriesKey = array_search('categories', $header);
+                    $categoryIdKey = array_search('category_id', $header);
+                    $storeData = array_search('store', $header);
 
-                    $websiteId = $this->_storeManager->getWebsite()->getWebsiteId();
-                    $store = $this->_storeManager->getStore();
+                    $store = $this->storeManager->getStore();
                     $storeId = $store->getStoreId();
-                    $singlestoremode = $this->_storeManager->isSingleStoreMode();
-                    $_stores = [];
-                    if (!$singlestoremode) {
-                        $stores = $this->_storeManager->getStores();
+                    $singleStoreMode = $this->storeManager->isSingleStoreMode();
+                    $storeArray = [];
+                    
+                    if (!$singleStoreMode) {
+                        $stores = $this->storeManager->getStores();
+                        
                         foreach ($stores as $key => $store) {
-                            $_stores[$store->getCode()] = $store->getId();
+                            $storeArray[$store->getCode()] = $store->getId();
                         }
                     }
+                    
                     $rootNodeId = $store->getRootCategoryId();
-                    $rootCat = $this->_categoryFactory->create();
-                    $cat_info = $rootCat->load($rootNodeId);
+                    $rootCat = $this->categoryFactory->create();
+                    $categoryInfo = $rootCat->load($rootNodeId);
 
-                        $alreadyexist = [];
-                        $categorycollection = $this->_categoryFactory->create()->getCollection()->addAttributeToSelect('name');
-                        $exist_categories_name = [];
-                        $exist_categories_path = [];
-                        $exist_categories_pathname = [];
-                    foreach ($categorycollection as $key => $value) {
-                        $exist_categories_name[$value->getId()] = $value->getName();
-                        $exist_categories_path[$value->getId()] = $value->getPath();
-                        $checkcat = $this->_categoryFactory->create();
-                        $categoryobj = $checkcat->load($value->getId());
-                        $parentcatnames = [];
-                        $parentid = '';
-                        foreach ($this->getparentCategories($categoryobj) as $key => $parentcate) {
-                            $parentcatnames[] = $parentcate->getName();
-                            $parentid = $parentcate->getId();
+                    $alreadyExist = [];
+                    $categoryCollection = $this->categoryFactory
+                        ->create()
+                        ->getCollection();
+                    $existingCatPath = [];
+                    $existingCatPathName = [];
+                        
+                    foreach ($categoryCollection as $key => $value) {
+                        $existingCategories[$value->getId()] = $value->getName();
+                        $existingCatPath[$value->getId()] = $value->getPath();
+                        $checkCat = $this->categoryFactory->create();
+                        $categoryObj = $checkCat->load($value->getId());
+                        $parentCatNames = [];
+                        $parentId = '';
+                        
+                        foreach ($this->getParentCategories($categoryObj) as $key => $parentCat) {
+                            $parentCatNames[] = $parentCat->getName();
+                            $parentId = $parentCat->getId();
                         }
-                        $parent_cat = implode('/', $parentcatnames);
-                        if ($parent_cat && $parentid) {
-                            $exist_categories_pathname[$parentid] = $parent_cat;
+                        
+                        $parentCategories = implode('/', $parentCatNames);
+                        
+                        if ($parentCategories && $parentId) {
+                            $existingCatPathName[$parentId] = $parentCategories;
                         }
                     }
-                    foreach ($data as $key => $categoryitem) {
-                        if ($key!=0) {
-                            $cat_data = $this->_getKeyValue($categoryitem, $header);
-                            if (isset($cat_data['category_id'])) {
-                                unset($cat_data['category_id']);
+
+                    foreach ($data as $key => $categoryItem) {
+                        if ($key != 0) {
+                            $catData = $this->getKeyValue($categoryItem, $header);
+
+                            if (isset($catData['category_id'])) {
+                                unset($catData['category_id']);
                             }
-                            if (isset($categorieskey) && ($categorieskey!='' || $categorieskey===0)) {
-                                $array_key = array_search($categoryitem[$categorieskey], $exist_categories_pathname);
-                                if ($array_key) {
-                                    $alreadyexist[] = $categoryitem[$categorieskey];
+
+                            if (isset($categoriesKey) && ($categoriesKey != '' || $categoriesKey === 0)) {
+                                $arrayKey = array_search($categoryItem[$categoriesKey], $existingCatPathName);
+
+                                if ($arrayKey) {
+                                    $alreadyExist[] = $categoryItem[$categoriesKey];
                                 } else {
-                                    $strmark = strrpos($categoryitem[$categorieskey], '/');
-                                    $_parentid = '';
-                                    $newcategory = '';
-                                    if ($strmark!=false) {
-                                        $parentpath = substr($categoryitem[$categorieskey], 0, ($strmark));
-                                        $newcategory = substr($categoryitem[$categorieskey], ($strmark)+1);
-                                        $_parentid = array_search($parentpath, $exist_categories_pathname);
+                                    $strMark = strrpos($categoryItem[$categoriesKey], '/');
+                                    $categoryId = '';
+                                    $newCategory = '';
+
+                                    if ($strMark != false) {
+                                        $parentPath = substr($categoryItem[$categoriesKey], 0, $strMark);
+                                        $newCategory = substr($categoryItem[$categoriesKey], $strMark + 1);
+                                        $categoryId = array_search($parentPath, $existingCatPathName);
                                     } else {
-                                        $newcategory = $categoryitem[$categorieskey];
-                                        $_parentid = $cat_info->getId();
+                                        $newCategory = $categoryItem[$categoriesKey];
+                                        $categoryId = $categoryInfo->getId();
                                     }
-                                    if ($_parentid!='' && $newcategory!='') {
-                                        $cateitem = $this->_categoryFactory->create();
-                                        $cateitem->setData($cat_data);
-                                        $parentcategory = $this->_categoryFactory->create();
-                                        $parentcategory->load($_parentid);
-                                        if ($parentcategory->getId()) {
-                                            $cateitem->setParentId($_parentid);
-                                            $cateitem->setPath($parentcategory->getPath());
-                                        }
-                                        $cateitem->setAttributeSetId($cateitem->getDefaultAttributeSetId());
-                                        $cateitem->setName($newcategory);
 
-                                        $_url_key =  $cat_data['url_key'] ? $cat_data['url_key'] : str_replace(' ', '-', strtolower($newcategory));
-                                        if (in_array($newcategory, $exist_categories_name)) {
-                                            $_url_key .= '-'.mt_rand(10, 99);
-                                        }
-                                        $cateitem->setUrlKey($_url_key);
+                                    if ($categoryId != '' && $newCategory != '') {
+                                        $cateItem = $this->categoryFactory->create();
+                                        $cateItem->setData($catData);
+                                        $parentCategory = $this->categoryFactory->create();
+                                        $parentCategory->load($categoryId);
 
-                                        $cateitem->setStoreId($storeId);
-                                        $cateitem->save();
-                                        if ($cateitem->getId()) {
-                                            $exist_categories_name[$cateitem->getId()] = $cateitem->getName();
-                                            $exist_categories_path[$cateitem->getId()] = $cateitem->getPath();
-                                            $exist_categories_pathname[$cateitem->getId()] = $categoryitem[$categorieskey];
+                                        if ($parentCategory->getId()) {
+                                            $cateItem->setParentId($categoryId);
+                                            $cateItem->setPath($parentCategory->getPath());
+                                        }
+
+                                        $cateItem->setAttributeSetId($cateItem->getDefaultAttributeSetId());
+                                        $cateItem->setName($newCategory);
+
+                                        // if url_key is specified use that key, otherwise use generated key
+                                        if ($catData['url_key']) {
+                                            $urlKey = $catData['url_key'];
+                                        } else {
+                                            $urlKey = str_replace(' ', '-', strtolower($newCategory));
+                                        }
+
+                                        if (in_array($newCategory, $existingCategories)) {
+                                            $urlKey .= '-'.mt_rand(10, 99);
+                                        }
+                                        $cateItem->setUrlKey($urlKey);
+                                        $cateItem->setStoreId($storeId);
+                                        $cateItem->save();
+                                        
+                                        if ($cateItem->getId()) {
+                                            $existingCategories[$cateItem->getId()] = $cateItem->getName();
+                                            $existingCatPath[$cateItem->getId()] = $cateItem->getPath();
+                                            $existingCatPathName[$cateItem->getId()] = $categoryItem[$categoriesKey];
                                         }
                                     }
                                 }
-                            } elseif (isset($categoryidkey) && ($categoryidkey!='' || $categoryidkey===0) && $storedata!='') {
+                            } elseif (isset($categoryIdKey) &&
+                                        ($categoryIdKey != '' || $categoryIdKey === 0) && $storeData != '') {
                                 //update categories
-                                $catemodel = $this->_categoryFactory->create();
-                                if (!$singlestoremode && isset($_stores[$categoryitem[$storedata]])) {
-                                        $catemodel->setStoreId($_stores[$categoryitem[$storedata]]);
+                                $cateModel = $this->categoryFactory->create();
+
+                                if (!$singleStoreMode && isset($storeArray[$categoryItem[$storeData]])) {
+                                    $cateModel->setStoreId($storeArray[$categoryItem[$storeData]]);
                                 } else {
-                                    $catemodel->setStoreId($storeId);
+                                    $cateModel->setStoreId($storeId);
                                 }
-                                $cateitem = $catemodel->load($categoryitem[$categoryidkey]);
-                                $nocategoryfound = true;
-                                if ($cateitem->getId()) {
-                                    $nocategoryfound = false;
-                                    $attributesetid = $cateitem->getAttributeSetId();
-                                    $_parentid = $cateitem->getParentId();
-                                    foreach ($cat_data as $key => $value) {
-                                        if (!in_array($key, ['url_key','category_id','url_path','path','level','children_count','full_path'])) {
-                                            $cateitem->setData($key, $value);
+                                $cateItem = $cateModel->load($categoryItem[$categoryIdKey]);
+                                $noCategoryFound = true;
+
+                                if ($cateItem->getId()) {
+                                    $noCategoryFound = false;
+                                    $attributeSetId = $cateItem->getAttributeSetId();
+                                    $categoryId = $cateItem->getParentId();
+
+                                    foreach ($catData as $key => $value) {
+                                        $acceptedKeys = array(
+                                            'url_key',
+                                            'category_id',
+                                            'url_path',
+                                            'path',
+                                            'level',
+                                            'children_count',
+                                            'full_path');
+
+                                        if (!in_array($key, $acceptedKeys)) {
+                                            $cateItem->setData($key, $value);
                                         }
                                     }
-                                    $parentid = $cateitem->getParentId();
-                                    if ($parentid!=$_parentid && $cateitem->getId()>2) {
-                                        $_catemodel = $this->_categoryFactory->create();
-                                        $parentcat = $_catemodel->load($parentid);
-                                        if ($parentcat->getId()) {
-                                            $cateitem->setPath($parentcat->getPath().'/'.$cateitem->getId());
+                                    $parentId = $cateItem->getParentId();
+
+                                    if ($parentId != $categoryId && $cateItem->getId() > 2) {
+                                        $categoryModel = $this->categoryFactory->create();
+                                        $parentCategories = $categoryModel->load($parentId);
+
+                                        if ($parentCategories->getId()) {
+                                            $cateItem->setPath($parentCategories->getPath() . '/'
+                                                . $cateItem->getId());
                                         } else {
                                             $this->messageManager->addError('Parent category not Found.');
                                             $resultRedirect->setPath('navin_importexportcategory/*/edit');
                                             return $resultRedirect;
                                         }
-                                        $cateitem->move($parentid, false);
+                                        
+                                        $cateItem->move($parentId, false);
                                     }
-                                    if ($cateitem->getId()<=2) {
-                                        $cateitem->unsetData('posted_products');
+
+                                    if ($cateItem->getId() <= 2) {
+                                        $cateItem->unsetData('posted_products');
                                     }
-                                    $cateitem->save();
+                                    
+                                    $cateItem->save();
                                 }
                             } else {
                                 $this->messageManager->addError('Data Column not Found.');
@@ -220,20 +285,23 @@ class Save extends \Magento\Backend\App\Action
                             }
                         }
                     }
-                    if (isset($alreadyexist) && !empty($alreadyexist)) {
-                        $this->messageManager->addError(__('This categories are already exist: ').implode(', ', $alreadyexist));
-                        $this->messageManager->addSuccess(__('Other categories has been imported Successfully'));
-                    } elseif (isset($categoryidkey) && $categoryidkey===0) {
-                        if ($nocategoryfound) {
+                    
+                    if (isset($alreadyExist) && !empty($alreadyExist)) {
+                        $this->messageManager->addError(
+                            __(sprintf('These categories already exist: %s', implode(', ', $alreadyExist)))
+                        );
+                        $this->messageManager->addSuccess(__('Other categories have been imported Successfully'));
+                    } elseif (isset($categoryIdKey) && $categoryIdKey === 0) {
+                        if ($noCategoryFound) {
                             $this->messageManager->addError(__('No Category Found.'));
                         } else {
-                            $this->messageManager->addSuccess(__('Categories has been updated Successfully'));
+                            $this->messageManager->addSuccess(__('Categories have been updated Successfully'));
                         }
                     } else {
-                        $this->messageManager->addSuccess(__('Categories has been imported Successfully'));
+                        $this->messageManager->addSuccess(__('Categories have been imported Successfully'));
                     }
-                        unlink($filepath);
-                        $this->_backendSession->setNavinImportcategoryTestData(false);
+                        unlink($filePath);
+                        $this->backendSession->setNavinImportcategoryTestData(false);
                         $resultRedirect->setPath('navin_importexportcategory/*/edit');
                         return $resultRedirect;
                 } else {
@@ -246,14 +314,14 @@ class Save extends \Magento\Backend\App\Action
                 $resultRedirect->setPath('navin_importexportcategory/*/edit');
                 return $resultRedirect;
             }
-        } catch (\Magento\Framework\Exception\LocalizedException $e) {
-            $this->_logger->debug($e->getMessage());
+        } catch (LocalizedException $e) {
+            $this->logger->debug($e->getMessage());
             $this->messageManager->addError($e->getMessage());
-        } catch (\RuntimeException $e) {
-            $this->_logger->debug($e->getMessage());
+        } catch (RuntimeException $e) {
+            $this->logger->debug($e->getMessage());
             $this->messageManager->addError($e->getMessage());
-        } catch (\Exception $e) {
-            $this->_logger->debug($e->getMessage());
+        } catch (Exception $e) {
+            $this->logger->debug($e->getMessage());
             $this->messageManager->addException($e, __('Something went wrong while saving the category.'));
         }
         $resultRedirect->setPath(
@@ -265,18 +333,24 @@ class Save extends \Magento\Backend\App\Action
         return $resultRedirect;
     }
 
-    protected function _uploadFileAndGetName()
+    /**
+     * Validates valid CSV file and uploads to file directory
+     *
+     * @return bool|string
+     * @throws \Exception
+     */
+    protected function uploadFileAndGetName()
     {
-        $uploader = $this->_fileUploaderFactory->create(['fileId' => 'file']);
+        $uploader = $this->fileUploaderFactory->create(['fileId' => 'file']);
         $uploader->setAllowedExtensions(['CSV', 'csv']);
         $uploader->setAllowRenameFiles(true);
         $uploader->setFilesDispersion(false);
-        $path = $this->_filesystem->getDirectoryRead(DirectoryList::VAR_DIR)
+        $path = $this->filesystem->getDirectoryRead(DirectoryList::VAR_DIR)
         ->getAbsolutePath('categoryimport');
 
         if (!is_dir($path)) {
-            $this->_fileio->mkdir($path, '0777', true);
-            $this->_fileio->chmod($path, '0777', true);
+            $this->fileio->mkdir($path, '0777', true);
+            $this->fileio->chmod($path, '0777', true);
         }
         $result = $uploader->save($path.'/');
         if (isset($result['file']) && !empty($result['file'])) {
@@ -285,13 +359,18 @@ class Save extends \Magento\Backend\App\Action
         return false;
     }
 
-    protected function _getKeyValue($row, $headerArray)
+    /**
+     * @param $row
+     * @param $headerArray
+     * @return array
+     */
+    protected function getKeyValue($row, $headerArray)
     {
         $temp = [];
         foreach ($headerArray as $key => $value) {
-            if ($value=='image') {
-                $temp[$value] = $this->_getImagePath($row[$key]);
-            } elseif ($value=='products' && $row[$key]!='') {
+            if ($value == 'image') {
+                $temp[$value] = $this->getImagePath($row[$key]);
+            } elseif ($value == 'products' && $row[$key]!='') {
                 $temp['posted_products'] = array_flip(explode('|', $row[$key]));
             } else {
                 $temp[$value] = $row[$key];
@@ -300,42 +379,59 @@ class Save extends \Magento\Backend\App\Action
         return $temp;
     }
 
-    protected function _getImagePath($categoryimage)
+    /**
+     * Fetches image from URL and inserts it into the image path directory
+     *
+     * @param $categoryImage
+     * @return mixed
+     */
+    protected function getImagePath($categoryImage)
     {
-        $weburl = strpos($categoryimage, 'http://');
-        if ($weburl!==false) {
-            $imagepath = $this->_filesystem->getDirectoryRead(DirectoryList::MEDIA)
+        $webUrl = strpos($categoryImage, 'http://');
+
+        if ($webUrl !== false) {
+            $imagePath = $this->filesystem->getDirectoryRead(DirectoryList::MEDIA)
                 ->getAbsolutePath('catalog/category');
-            $this->_fileio->mkdir($imagepath, '0777', true);
-            $file = file_get_contents($categoryimage);
-            if ($file!='') {
+            $this->fileio->mkdir($imagePath, '0777', true);
+            $file = file_get_contents($categoryImage);
+
+            if ($file != '') {
                 $allowed =  ['gif','png' ,'jpg', 'jpeg'];
-                $ext = strtolower(pathinfo($categoryimage, PATHINFO_EXTENSION));
+                $ext = strtolower(pathinfo($categoryImage, PATHINFO_EXTENSION));
+
                 if (in_array($ext, $allowed)) {
-                    $imagename = pathinfo($categoryimage, PATHINFO_BASENAME);
-                    if (!is_dir($imagepath)) {
-                        $this->_fileio->mkdir($imagepath, '0777', true);
-                        $this->_fileio->chmod($imagepath, '0777', true);
+                    $imageName = pathinfo($categoryImage, PATHINFO_BASENAME);
+
+                    if (!is_dir($imagePath)) {
+                        $this->fileio->mkdir($imagePath, '0777', true);
+                        $this->fileio->chmod($imagePath, '0777', true);
                     }
-                    $imagepath = $imagepath.'/'.$imagename;
-                    $result = file_put_contents($imagepath, $file);
+                    $imagePath = $imagePath.'/'.$imageName;
+                    $result = file_put_contents($imagePath, $file);
+
                     if ($result) {
-                        return $imagename;
+                        return $imageName;
                     }
                 }
             }
         } else {
-            return $categoryimage;
+            return $categoryImage;
         }
     }
 
-    protected function getparentCategories($category)
+    /**
+     * @param $category
+     * @return DataObject[]
+     * @throws LocalizedException
+     * @throws NoSuchEntityException
+     */
+    protected function getParentCategories($category)
     {
         $pathIds = array_reverse(explode(',', $category->getPathInStore()));
         /** @var \Magento\Catalog\Model\ResourceModel\Category\Collection $categories */
-        $categories = $this->_categoryFactory->create()->getCollection();
+        $categories = $this->categoryFactory->create()->getCollection();
         return $categories->setStore(
-            $this->_storeManager->getStore()
+            $this->storeManager->getStore()
         )->addAttributeToSelect(
             'name'
         )->addAttributeToSelect(

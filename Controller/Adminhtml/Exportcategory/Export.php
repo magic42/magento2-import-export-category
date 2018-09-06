@@ -74,7 +74,9 @@ class Export extends \Magento\Backend\App\Action
          $fileName = 'categories.csv';
         $content = '"category_id","parent_id"';
         $content .= ',"store"';
-        $content .= ',"name","path","image","is_active","is_anchor","include_in_menu","meta_title","meta_keywords","meta_description","display_mode","custom_use_parent_settings","custom_apply_to_products","custom_design","custom_design_from","custom_design_to","default_sort_by","page_layout","description","products"'."\n";
+        $content .= ',"name","path","image"';
+        $content .= ',"url_key"';
+        $content .= ',"is_active","is_anchor","include_in_menu","meta_title","meta_keywords","meta_description","display_mode","custom_use_parent_settings","custom_apply_to_products","custom_design","custom_design_from","custom_design_to","default_sort_by","page_layout","description","products"'."\n";
         $collection = $this->_categoryFactory->create()->getCollection()->addAttributeToSort('entity_id', 'asc');
         
         foreach ($collection as $key => $cat) {
@@ -90,7 +92,7 @@ class Export extends \Magento\Backend\App\Action
                     }
                     $content .= '"'.$categoryitem->getId().'","'.$categoryitem->getParentId().'","';
                     $content .= $_stores[$categoryitem->getStoreId()].'","';
-                    $content .= $categoryitem->getName().'","'.$categoryitem->getPath().'","'.$categoryitem->getImage().'","'.$categoryitem->getIsActive().'","'.$categoryitem->getIsAnchor().'","'.$categoryitem->getIncludeInMenu().'","'.$categoryitem->getMetaTitle().'","'.$categoryitem->getMetaKeywords().'","'.$categoryitem->getMetaDescription().'","'.$categoryitem->getDisplayMode().'","'.$categoryitem->getCustomUseParentSettings().'","'.$categoryitem->getCustomApplyToProducts().'","'.$categoryitem->getCustomDesign().'","'.$categoryitem->getCustomDesignFrom().'","'.$categoryitem->getCustomDesignTo().'","'.$categoryitem->getDefaultSortBy().'","'.$categoryitem->getPageLayout().'","'.$categoryitem->getDescription().'","'.$prodids.'"'."\n";
+                    $content .= $categoryitem->getName().'","'.$categoryitem->getPath().'","'.$categoryitem->getImage().'","'.$categoryitem->getUrlKey().'",'.$categoryitem->getIsActive().'","'.$categoryitem->getIsAnchor().'","'.$categoryitem->getIncludeInMenu().'","'.$categoryitem->getMetaTitle().'","'.$categoryitem->getMetaKeywords().'","'.$categoryitem->getMetaDescription().'","'.$categoryitem->getDisplayMode().'","'.$categoryitem->getCustomUseParentSettings().'","'.$categoryitem->getCustomApplyToProducts().'","'.$categoryitem->getCustomDesign().'","'.$categoryitem->getCustomDesignFrom().'","'.$categoryitem->getCustomDesignTo().'","'.$categoryitem->getDefaultSortBy().'","'.$categoryitem->getPageLayout().'","'.$categoryitem->getDescription().'","'.$prodids.'"'."\n";
                 }
             }
         }

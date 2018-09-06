@@ -160,11 +160,13 @@ class Save extends \Magento\Backend\App\Action
                                         }
                                         $cateitem->setAttributeSetId($cateitem->getDefaultAttributeSetId());
                                         $cateitem->setName($newcategory);
-                                        $_url_key = str_replace(' ', '-', strtolower($newcategory));
+
+                                        $_url_key =  $cat_data['url_key'] ? $cat_data['url_key'] : str_replace(' ', '-', strtolower($newcategory));
                                         if (in_array($newcategory, $exist_categories_name)) {
                                             $_url_key .= '-'.mt_rand(10, 99);
                                         }
                                         $cateitem->setUrlKey($_url_key);
+
                                         $cateitem->setStoreId($storeId);
                                         $cateitem->save();
                                         if ($cateitem->getId()) {
